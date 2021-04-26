@@ -23,40 +23,52 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -type license() :: #{
-vendor := string(),
-product := string(),
-version := string(),
+vendor := string(), %% 供应商
+product := string(), %% 产品
+version := string(), %% 版本
 customer := {string(), binary()},
-email := string(),
-validity := {string(), string()},
-permits := map(),
-hostid => string()}.
+email := string(), %% 邮件
+validity := {string(), string()}, %% 有效日期
+permits := map(), %% 证书
+hostid => string()}.%% 服务器ID
 
 -record(state, {license :: license(), timer, check_timer, monitor}).
 
+%% 启动license 管理服务
 -spec start_link() -> {ok, pid()}.
-start_link() ->
-  gen_server:start_link({local, emqx_license_mgr}, emqx_license_mgr, [], []).
+start_link() -> gen_server:start_link({local, emqx_license_mgr}, emqx_license_mgr, [], []).
 
+%% 载入文件
 -spec load(undefined | string()) -> ok.
 load(undefined) -> shutdown("Cannot find license file!");
+%% 传入文件名 载入文件
 load(File) ->
+%%  读取文件
   case file:read_file(File) of
+%%    返回license 信息
     {ok, Lic} ->
+%%   公钥验证
       try verify(Lic) of
+%%        应用证书
         {ok, Cert} -> apply(Cert);
+%%        验证错误
         {error, Reason, Cert} -> handle_bad_cert(Reason, Cert)
       catch
+%%        公钥非法
         error:'InvalidPublicKey':_Stk -> shutdown("The Public Key is invalid!");
+%%        ca证书非法
         error:'Invalid_CA_Certificate':_Stk -> shutdown("The CA Certificate is invalid!")
       end;
     {error, Reason} ->
       shutdown("Cannot read license file: " ++ atom_to_list(Reason))
   end.
 
+%% 核实 license 信息
 -spec verify(Lic :: binary()) -> {ok, #'OTPCertificate'{}} |{error, atom(), #'OTPCertificate'{}}.
 verify(Lic) ->
+%%  核实公钥
   ok = verify_public_key(),
+%%  获取ca文件
   CaFile = filename:join(code:priv_dir(emqx_license), "ca.crt"),
   {ok, CaCertBin} = file:read_file(CaFile),
   [{'Certificate', DerCaCert, _}] = public_key:pem_decode(CaCertBin),
@@ -64,6 +76,7 @@ verify(Lic) ->
   ok = vefify_public_key(CaCert),
   [{'Certificate', DerCert, _}] = public_key:pem_decode(Lic),
   Cert = public_key:pkix_decode_cert(DerCert, otp),
+
   case verify_lic_cert(CaCert, DerCert) of
     ok -> {ok, Cert};
     {error, Reason} -> {error, Reason, Cert}
@@ -135,26 +148,36 @@ handle_bad_cert(Reason, Cert) when is_atom(Reason) ->
 apply(Cert) ->
 %%  读取License
   License = read_license(Cert),
-%%  检查证书
+%%  检查证书时间
   case check_permits(License) of
+%%    有效期内
     true ->
+%%      提取 许可证 Permits
       #{permits := Permits} = License,
 %%      应用证书
       ok = apply_permits(License),
+%%      进程存储License 信息到state 中
       gen_server:call(emqx_license_mgr, {apply, License}, infinity),
+%%      从Permits 获取 customer_type 数据
       case maps:get(customer_type, Permits, 2) of
         10 -> evaluation_log();
         _ -> ok
       end;
+%%    时间失效
     false ->
+%%      重置License 信息 max_connections 设置为0
       #{permits := Permits} = License, License1 = License#{permits => Permits#{max_connections => 0}},
+%%      重新设置 License
       ok = apply_permits(License1),
-      gen_server:call(emqx_license_mgr, {apply, License}, infinity), expiry_log()
+%%     修改进程的License 信息
+      gen_server:call(emqx_license_mgr, {apply, License}, infinity),
+%%      打印过期日志
+      expiry_log()
   end.
 
 %% 检查许可证
 check_permits(#{permits := Permits, validity := {_, End}}) ->
-
+%% T1和T2相差的时间，格式{Days, {Hour, Minute, Seconds}
   case calendar:time_difference(calendar:local_time(), local_time(End)) of
     {Days, _Time} when Days < 0 ->
       case maps:get(type, Permits) of
@@ -173,6 +196,7 @@ check_permits(#{permits := Permits, validity := {_, End}}) ->
 apply_permits(#{permits := #{max_connections := ConnLimit}}) ->
   io:format("apply_permits: ~p~n", [ConnLimit]),
   ConnCount = 999999999,
+%%  设置应用的最大连接数据
   application:set_env(emqx_license, max_clients, ConnCount).
 
 -spec read_license(#'OTPCertificate'{}) -> license().
@@ -245,36 +269,8 @@ local_time([Y1,
 
 b2l(L) -> binary_to_integer(L).
 
-datetime([Y01,
-  Y0,
-  Y1,
-  Y2,
-  M1,
-  M2,
-  D1,
-  D2,
-  H1,
-  H2,
-  Min1,
-  Min2,
-  S1,
-  S2,
-  $Z]) ->
-  lists:flatten(io_lib:format("~c~c~c~c-~c~c-~c~c ~c~c:~c~c:~c~c",
-    [Y01,
-      Y0,
-      Y1,
-      Y2,
-      M1,
-      M2,
-      D1,
-      D2,
-      H1,
-      H2,
-      Min1,
-      Min2,
-      S1,
-      S2]));
+datetime([Y01, Y0, Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2, $Z]) ->
+  lists:flatten(io_lib:format("~c~c~c~c-~c~c-~c~c ~c~c:~c~c:~c~c", [Y01, Y0, Y1, Y2, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2]));
 datetime([Y1,
   Y2,
   M1,
@@ -371,6 +367,7 @@ info() -> gen_server:call(emqx_license_mgr, info, infinity).
 init([]) ->
   {ok, monitor(#state{license = #{}, timer = timer_backoff()})}.
 
+%% 进程状态存储License 信息
 handle_call({apply, License}, _From, State) ->
   {reply, ok, State#state{license = License}};
 
@@ -443,6 +440,7 @@ checkalive(State = #state{check_timer = TRef}) ->
 type(1) -> <<"official">>;
 type(0) -> <<"trial">>.
 
+%% 评审 日志
 evaluation_log() ->
   emqx_logger:critical("============================================="
   "=================================="),
