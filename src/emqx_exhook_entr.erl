@@ -8,9 +8,6 @@
 %%%-------------------------------------------------------------------
 -module(emqx_exhook_entr).
 -author("root").
-
--module(emqx_exhook_entr).
-
 -export([logger_header/0]).
 -include("../include/emqx.hrl").
 -include("../include/logger.hrl").
