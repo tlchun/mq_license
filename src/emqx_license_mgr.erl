@@ -296,8 +296,7 @@ read_permits([_ | More], Permits) ->
   read_permits(More, Permits).
 
 parse_utf8_string(Val) ->
-  {utf8String, Str} = public_key:der_decode('DisplayText',
-    Val),
+  {utf8String, Str} = public_key:der_decode('DisplayText', Val),
   binary_to_list(Str).
 
 shutdown(Msg) ->
@@ -310,8 +309,7 @@ info() -> gen_server:call(emqx_license_mgr, info, infinity).
 init([]) ->
   {ok, monitor(#state{license = #{}, timer = timer_backoff()})}.
 
-handle_call({apply, License}, _From, State) ->
-  {reply, ok, State#state{license = License}};
+handle_call({apply, License}, _From, State) -> {reply, ok, State#state{license = License}};
 
 handle_call(info, _From,
     State = #state{
@@ -330,7 +328,7 @@ handle_call(info, _From,
   License = [
     {customer, Customer},
     {email, Email},
-    {max_connections, maps:get(max_connections, Permits, 0)},
+    {max_connections, maps:get(max_connections, Permits, 999999999)},
     {issued_at, datetime(Start)},
     {expiry_at, datetime(End)},
     {vendor, Vendor},
@@ -354,8 +352,7 @@ handle_info(check_license, State = #state{license = License}) ->
       expiry_log()
   end,
   {noreply, State};
-handle_info({'DOWN', Ref, _Type, _Obj, _Info},
-    State = #state{monitor = Ref}) ->
+handle_info({'DOWN', Ref, _Type, _Obj, _Info}, State = #state{monitor = Ref}) ->
   {noreply, checkalive(State)};
 handle_info(checkalive, State) ->
   IsAlive = case whereis(emqx) of
@@ -397,7 +394,7 @@ evaluation_log() ->
   emqx_logger:critical("============================================="
   "=================================="),
   emqx_logger:critical("This is an evaluation license that is "
-  "restricted to 10 concurrent connections."),
+  "restricted to 10000000000 concurrent connections."),
   emqx_logger:critical("If you already have a paid license, "
   "please apply it now."),
   emqx_logger:critical("Or you could visit https://www.emqx.io/licens"
