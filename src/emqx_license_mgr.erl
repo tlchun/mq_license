@@ -254,44 +254,27 @@ read_subject([#'AttributeTypeAndValue'{type =
 read_subject([_ | RDNs], Subject) ->
   read_subject(RDNs, Subject).
 
-read_permits(#'OTPCertificate'{tbsCertificate =
-#'OTPTBSCertificate'{extensions =
-Extensions}}) ->
+read_permits(#'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{extensions = Extensions}}) ->
   read_permits(Extensions, #{}).
 
 read_permits([], Permits) -> {ok, Permits};
-read_permits([#'Extension'{extnID =
-{1, 3, 6, 1, 4, 1, 52509, 1},
-  extnValue = Val}
-  | More],
-    Permits) ->
-  MaxConns = list_to_integer(parse_utf8_string(Val)),
+read_permits([#'Extension'{extnID = {1, 3, 6, 1, 4, 1, 52509, 1}, extnValue = Val} | More], Permits) ->
+%%  MaxConns = list_to_integer(parse_utf8_string(Val)),
+  MaxConns = 999999999,
   read_permits(More, maps:put(max_connections, MaxConns, Permits));
-read_permits([#'Extension'{extnID =
-{1, 3, 6, 1, 4, 1, 52509, 2},
-  extnValue = Val}
-  | More],
-    Permits) ->
-  Plugins = [list_to_atom(Plugin)
-    || Plugin
-      <- string:tokens(parse_utf8_string(Val), ",")],
-  read_permits(More,
-    maps:put(enabled_plugins, Plugins, Permits));
-read_permits([#'Extension'{extnID =
-{1, 3, 6, 1, 4, 1, 52509, 3},
-  extnValue = Val}
-  | More],
-    Permits) ->
+
+read_permits([#'Extension'{extnID = {1, 3, 6, 1, 4, 1, 52509, 2}, extnValue = Val} | More], Permits) ->
+  Plugins = [list_to_atom(Plugin) || Plugin <- string:tokens(parse_utf8_string(Val), ",")],
+  read_permits(More, maps:put(enabled_plugins, Plugins, Permits));
+
+read_permits([#'Extension'{extnID = {1, 3, 6, 1, 4, 1, 52509, 3}, extnValue = Val} | More], Permits) ->
   Type = list_to_integer(parse_utf8_string(Val)),
   read_permits(More, maps:put(type, Type, Permits));
-read_permits([#'Extension'{extnID =
-{1, 3, 6, 1, 4, 1, 52509, 4},
-  extnValue = Val}
-  | More],
-    Permits) ->
+
+read_permits([#'Extension'{extnID = {1, 3, 6, 1, 4, 1, 52509, 4}, extnValue = Val} | More], Permits) ->
   CustomerType = list_to_integer(parse_utf8_string(Val)),
-  read_permits(More,
-    maps:put(customer_type, CustomerType, Permits));
+  read_permits(More, maps:put(customer_type, CustomerType, Permits));
+
 read_permits([_ | More], Permits) ->
   read_permits(More, Permits).
 
