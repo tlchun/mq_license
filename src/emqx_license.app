@@ -12,3 +12,7 @@
               {applications,[kernel,stdlib]},
               {mod,{emqx_license_app,[]}},
               {relup_deps,[emqx]}]}.
+
+
+%% {ok,{_,[{abstract_code,{_,AC}}]}} = beam_lib:chunks(emqx_license_mgr,[abstract_code]).
+%% io:fwrite("~s~n", [erl_prettypr:format(erl_syntax:form_list(AC))]).
